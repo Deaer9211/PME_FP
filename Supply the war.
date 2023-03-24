@@ -1,0 +1,1923 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <windows.h>//header file for windows
+#include <string.h>
+#define max 800
+int stack[800];
+int d1[800],d1_sz;
+int d2[800],d2_sz;
+int top=-1;
+int maze[20][20];//store the information of the map
+int D[800][800];//D[a][b]:the min distance between a and b
+const int state_num=2*20*20;//the size of the map is 20*20, and because the cars have two way to proceed(vertical and horizental) , we use twice space of the number of the points in the map to store all condition
+_Bool state[2*20*20];//memorize whether the states exist or not
+int adj[2*20*20][6];//adjoin, there will be at most 6 states for a car to move to
+_Bool vis[800];//for DFS and BFS
+//function for color changing
+void color(int color_value);
+//for DFS
+void push(int st);
+void pop();
+void reset();
+//function for find minium of distance between st to other points
+void BFS(int st);
+//function for traceback from f to st
+int prev(int st, int f);
+//function for show the result:given path of the car,number of the cars,and the number of steps of each car
+void animation(int path[][40],int cn, int s[10]);
+int main(){
+    char input[10000];
+    int supnum=0;//supply number
+    int h;//h is used to define the calculation between i and j, just for convenience
+    int temp=0;
+    int supx[10],supy[10];//find supply location
+    FILE*fptr=fopen("map1.txt","r");//------------------------------------------------------------------------------------- open and scanf the map
+    fscanf(fptr,"%s",input);
+    int a=20;
+    //----------------------------------------------------------------store the supply point in the map----------------------------------------------------------------
+    for(int i=0;i<a;i++){
+        for(int j=0;j<a;j++){
+            maze[i][j]=input[temp]-48;//convert the Ascii code into number
+            temp++;
+            if(maze[i][j]==2){//record the location
+                supx[supnum]=i;
+                supy[supnum]=j;
+                supnum++;//calculate the number of supply
+            }
+        }
+    }
+    temp=0;
+    //set all the state's next state (neighbor) -1 to avoid mix up
+    for(int i=0;i<state_num;i++){
+        for (int j=0;j<6;j++){
+                adj[i][j]=-1;
+        }
+    }
+    //-----------------------------------------------------------define the state and the edge of the map ----------------------------------------------------------------
+    memset(state,0,state_num);//set all the state 0
+    //horizontal
+    for(int i=0;i<19;i++){
+        for(int j=0;j<18;j++){
+            h=i*20+j;
+            if(maze[i][j]!=0&&maze[i][j+1]!=0&&maze[i][j+2]!=0&&maze[i+1][j]!=0&&maze[i+1][j+1]!=0&&maze[i+1][j+2]!=0){
+                state[h]=1;//no wall is included
+            }
+
+        }
+    }
+    //vertical(+401)
+    for(int i=0;i<18;i++){
+        for(int j=0;j<19;j++){
+             h=i*20+j;
+            if(maze[i][j]!=0&&maze[i][j+1]!=0&&maze[i+1][j]!=0&&maze[i+1][j+1]!=0&&maze[i+2][j]!=0&&maze[i+2][j+1]!=0){
+                state[h+401]=1;
+            }
+        }
+    }
+    //----------------------------------------------find the edge of horizontal state-------------------------------------------------------------
+    //center part
+    for(int i=1;i<18;i++){
+        for(int j=1;j<17;j++){
+            h=i*20+j;
+            if(state[h]){
+                //LU
+                if(state[h+381]){
+                    adj[h][0]=h+381;
+                }
+                //L
+                if(state[h-1]){
+                    adj[h][1]=h-1;
+                }
+                //LD
+                if(state[h+401]){
+                    adj[h][2]=h+401;
+                }
+                //RU
+                if(state[h+382]){
+                    adj[h][3]=h+382;
+                }
+                //R
+                if(state[h+1]){
+                    adj[h][4]=h+1;
+                }
+                //RD
+                if(state[h+402]){
+                    adj[h][5]=h+402;
+                }
+            }
+        }
+    }
+    //corner
+    //LU
+    if(state[0]){
+        if(state[401]){
+            adj[0][2]=401;
+        }
+        if(state[1]){
+            adj[0][4]=1;
+        }
+        if(state[402]){
+            adj[0][5]=402;
+        }
+    }
+    //RU
+    if(state[17]){
+        if(state[16]){
+            adj[17][1]=16;
+        }
+        if(state[418]){
+            adj[17][2]=418;
+        }
+        if(state[419]){
+            adj[17][5]=419;
+        }
+    }
+    //LD
+    if(state[360]){
+        if(state[741]){
+                adj[360][0]=741;
+        }
+        if(state[742]){
+                adj[360][3]=742;
+        }
+        if(state[361]){
+                adj[360][4]=361;
+        }
+    }
+    //RD
+    if(state[377]){
+        if(state[758]){
+                adj[377][0]=758;
+        }
+        if(state[376]){
+                adj[377][1]=376;
+        }
+        if(state[759]){
+                adj[377][3]=759;
+        }
+    }
+    //martin
+    //Up
+    for(int j=1;j<17;j++){
+        if(state[j]){
+            if(state[j-1]){
+                adj[j][1]=j-1;//L
+            }
+            if(state[j+401]){
+                adj[j][2]=j+401;//LD
+            }
+            if(state[j+1]){
+                adj[j][4]=j+1;//R
+            }
+            if(state[j+402]){
+                adj[j][5]=j+402;//RD
+            }
+        }
+    }
+    //Down
+    for(int j=361;j<377;j++){
+        if(state[j]){
+            if(state[j+381]){
+                adj[j][0]=j+381;//LU
+            }
+            if(state[j-1]){
+                adj[j][1]=j-1;//L
+            }
+            if(state[j+382]){
+                adj[j][3]=j+382;//RU
+            }
+            if(state[j+1]){
+                adj[j][4]=j+1;//R
+            }
+        }
+    }
+    //Left
+    for(int j=1;j<18;j++){
+        if(state[j*20]){
+            if(state[j*20+381]){
+                    adj[j*20][0]=j*20+381;//LU
+                }
+                if(state[j*20+401]){
+                    adj[j*20][2]=j*20+401;//LD
+                }
+                if(state[j*20+382]){
+                    adj[j*20][3]=j*20+382;//RU
+                }
+                if(state[j*20+1]){
+                    adj[j*20][4]=j*20+1;//R
+                }
+                if(state[j*20+402]){
+                    adj[j*20][5]=j*20+402;//RD
+                }
+        }
+    }
+    //Right
+    for(int j=1;j<18;j++){
+        if(state[j*20+17]){
+            if(state[j*20+19+381]){
+                    adj[j*20+19][0]=j*20+19+381;//LU
+                }
+                if(state[j*20-1]){
+                    adj[j*20+19][1]=j*20+19-1;//L
+                }
+                if(state[j*20+401]){
+                    adj[j*20+19][2]=j*20+19+401;//LD
+                }
+                if(state[j*20+382]){
+                    adj[j*20+19][3]=j*20+19+382;//RU
+                }
+                if(state[j*20+402]){
+                    adj[j*20+19][5]=j*20+19+402;//RD
+                }
+        }
+    }
+    //----------------------------------------------find the edge of vertical state-------------------------------------------------------------
+    //center part
+    for(int i=1;i<17;i++){
+        for(int j=1;j<18;j++){
+            h=i*20+j+401;
+            if(state[h]){
+                if(state[h-20]){//U
+                    adj[h][0]=h-20;
+                }
+                if(state[h-402]){//UL
+                    adj[h][1]=h-402;
+                }
+                if(state[h-382]){//DL
+                    adj[h][2]=h-382;
+                }
+                if(state[h+20]){//D
+                    adj[h][3]=h+20;
+                }
+                if(state[h-381]){//DR
+                    adj[h][4]=h-381;
+                }
+                if(state[h-401]){//UR
+                    adj[h][5]=h-401;
+                }
+            }
+        }
+
+    }
+    //corner
+    //LU
+    if(state[401]){
+        h=401;
+        if(state[h+20]){
+            adj[h][3]=h+20;//D
+        }
+        if(state[h-381]){//DR
+            adj[h][4]=h-381;
+        }
+        if(state[h-401]){//UR
+            adj[h][5]=h-401;
+        }
+    }
+    //RU
+    if(state[419]){
+        h=419;
+        if(state[h-402]){
+            adj[h][1]=h-402;//UL
+        }
+        if(state[h-382]){
+            adj[h][2]=h-382;//DL
+        }
+        if(state[h+20]){
+            adj[h][3]=h+20;//D
+        }
+    }
+    //LD
+    if(state[741]){
+        h=741;
+        if(state[h-20]){//U
+            adj[h][0]=h-20;
+        }
+        if(state[h-381]){//DR
+            adj[h][4]=h-381;
+        }
+        if(state[h-401]){//UR
+            adj[h][5]=h-401;
+        }
+    }
+    //RD
+    if(state[759]){
+        h=759;
+        if(state[h-20]){//U
+            adj[h][0]=h-20;
+        }
+        if(state[h-402]){//UR
+            adj[h][1]=h-402;
+        }
+        if(state[h-382]){//DR
+            adj[h][2]=h-382;
+        }
+    }
+    //martin
+    //Up
+    for(int i=402;i<418;i++){
+        if(state[i]){
+            if(state[i-402]){
+                adj[i][1]=i-402;//UL
+            }
+            if(state[i-382]){
+                adj[i][2]=i-382;//DL
+            }
+            if(state[i+20]){
+                adj[i][3]=i+20;//D
+            }
+            if(state[i-381]){
+                adj[i][4]=i-381;//DR
+            }
+            if(state[i-401]){
+                adj[i][5]=i-401;//UR
+            }
+        }
+    }
+    //Down
+    for(int i=742;i<759;i++){
+        if(state[i]){
+            if(state[i-20]){//U
+                adj[i][0]=i-20;
+            }
+            if(state[i-402]){//UL
+                adj[i][1]=i-402;
+            }
+            if(state[i-382]){//DL
+                adj[i][2]=i-382;
+            }
+            if(state[i-381]){//DR
+                adj[i][4]=i-381;
+            }
+            if(state[i-401]){//UR
+                adj[i][5]=i-401;
+            }
+        }
+    }
+    //Left
+    for(int i=1;i<17;i++){
+        h=20*i+401;
+        if(state[h]){
+            if(state[h]){
+                if(state[h-20]){//U
+                    adj[h][0]=h-20;
+                }
+                if(state[h+20]){//D
+                    adj[h][3]=h+20;
+                }
+                if(state[h-381]){//DR
+                    adj[h][4]=h-381;
+                }
+                if(state[h-401]){//UR
+                    adj[h][5]=h-401;
+                }
+            }
+        }
+    }
+    //Right
+    for(int i=1;i<17;i++){
+        h=20*i+419;
+        if(state[h]){
+            if(state[h]){
+                if(state[h-20]){//U
+                    adj[h][0]=h-20;
+                }
+                if(state[h-402]){//UL
+                    adj[h][1]=h-402;
+                }
+                if(state[h-382]){//DL
+                    adj[h][2]=h-382;
+                }
+                if(state[h+20]){//D
+                    adj[h][3]=h+20;
+                }
+            }
+        }
+    }
+    //----------------------------------------------use DFS to find the number of blocks-------------------------------------------------------------
+    int state_sup[supnum][8];//used to find the states that contain the supply pts, and each of the supply pts has at most 8 states
+    temp=0;
+    for(int i=0;i<20;i++){
+        for(int j=0;j<20;j++){
+            h=i*20+j;
+            if(maze[i][j]==2){
+                if(state[h]){
+                    state_sup[temp][0]=h;
+                }else state_sup[temp][0]=-1;
+                if(state[h-20]){
+                    state_sup[temp][1]=h-20;
+                }else state_sup[temp][1]=-1;
+                if(state[h+401-40]){
+                    state_sup[temp][2]=h+401-40;
+                }else state_sup[temp][2]=-1;
+                if(state[h+401-41]){
+                    state_sup[temp][3]=h+401-41;
+                }else state_sup[temp][3]=-1;
+                if(state[h-22]){
+                    state_sup[temp][4]=h-22;
+                }else state_sup[temp][4]=-1;
+                if(state[h-2]){
+                    state_sup[temp][5]=h-2;
+                }else state_sup[temp][5]=-1;
+                if(state[h+401-1]){
+                    state_sup[temp][6]=h+401-1;
+                }else state_sup[temp][6]=-1;
+                if(state[h+401]){
+                    state_sup[temp][7]=h+401;
+                }else state_sup[temp][7]=-1;
+                temp++;
+
+            }
+        }
+    }
+    //set up Start pt and End pt to find a route; if cannot, split the area;
+    int startst,endst;
+    int block[supnum][supnum],visit[800];
+    int ss;//ss is mean start state
+    temp=-1;
+    int sup_check[supnum];//to check whether this supply point has been visited
+    for(int i=0;i<supnum;i++){//initialize
+        for(int j=0;j<supnum;j++)
+            block[i][j]=-1;
+    }
+    for(int i=0;i<supnum;i++)//initialize
+        sup_check[i]=i;
+            //----------------------------------------------start check the supply points-------------------------------------------------------------
+    for(int k=0;k<supnum;k++){
+        if(sup_check[k]!=-1){//avoid visited
+            temp++;
+            reset();//top-1
+            int temp2=0;//second variable of block
+            for(int j=0;j<8;j++){
+                if(state_sup[k][j]!=-1){//find a supply point to be the start point
+                    startst=state_sup[k][j];
+                    block[temp][temp2]=k;//save the key of supply point that included in the same block
+                    temp2++;
+                    push(startst);
+                    ss=startst;
+                    j=8;//break this loop
+                }
+            }
+
+            for(int i=k+1;i<supnum;i++){//find another supply point to be the end point
+                int flag=0,fw,findpath;//fw mean find the way
+                for(int ds=0;ds<800;ds++)//initialize
+                    visit[ds]=0;
+                push(startst);
+                flag=0;
+                while(flag==0){
+                    ss=stack[top];
+                    findpath=0;
+                    for(int i2=0;i2<6;i2++){
+                        int fw=adj[ss][i2];//store the state of the next step
+                        if(fw!=-1&&visit[fw]==0){
+                            visit[fw]=1;
+                            push(fw);
+                            findpath=1;
+                            i2=6;
+                            if(fw==state_sup[i][0]||fw==state_sup[i][1]||fw==state_sup[i][2]||fw==state_sup[i][3]||fw==state_sup[i][4]||fw==state_sup[i][5]||fw==state_sup[i][6]||fw==state_sup[i][7])
+                                flag=1;
+                        }
+                    }
+                    if(findpath==0&&flag!=1){//cannot find the path
+                        pop();
+                        if(top<0){
+                            flag=-1;
+                            break;
+                        }
+                    }
+                }
+                if(flag==1){//find!
+                    block[temp][temp2]=i;//save this supply point to the same block with start point
+                    temp2++;
+                    sup_check[i]=-1;//mark this supply checked so it won't be the start point afterwards
+                }
+            }
+        }
+    }
+    //----------------------------------------------organize the block and calculate the cars' number-------------------------------------------------------------
+    int block_num=temp+1;//store the number of blocks
+    int cftb[block_num];//Cars For This Block
+    int sotb[block_num];//Supply Of This Block
+    for(int i=0;i<block_num;i++){
+        temp=0;
+        for(int j=0;j<supnum;j++){
+            if(block[i][j]!=-1){
+                temp++;
+            }else{
+                j=supnum;
+            }
+        }
+        sotb[i]=temp;
+        if(temp%3!=0){
+            temp=temp/3+1;
+        }else{
+            temp/=3;
+        }
+        cftb[i]=temp;//store the number of cars in the NO.i block
+    }
+    int cars=0;
+    for(int i=0;i<block_num;i++)
+        cars+=cftb[i];
+    //----------------------------------------------use BFS to find the shortest path-------------------------------------------------------------
+    int f,p,f_state;
+    int mt,mst;//the middle pt
+    int rm=1000,d;
+    int route[3],route2[3];
+    int path[cars][40];//save the path for each
+    int pn=0;//path number
+    int step[cars];
+    for(int i=0;i<3;i++){
+        route[i]=-1;
+        route2[i]=-1;
+    }
+    for(int i=0;i<cars;i++){
+        for(int j=0;j<40;j++)
+            path[i][j]=-1;
+    }
+    for(int i=0;i<block_num;i++){
+        //let all of the supply points in the block have the turn to be start point
+        for(int j=0;j<sotb[i];j++){
+            ss=block[i][j];//use ss to present supply state
+            for(int k=0;k<8;k++){//find a supply state that exists
+                if(state_sup[ss][k]!=-1){
+                    startst=state_sup[ss][k];//assign this state to be start point state
+                    BFS(startst);//connect and calculate the min distance
+                    temp=k;
+                    k=8;
+                }
+            }
+        }
+        int pi;
+        if(cftb[i]==1){
+            if(sotb[i]==1){//1 sup-pt
+                ss=block[i][0];
+                for(int i2=0;i2<8;i2++){
+                    if(state_sup[ss][i2]!=-1){
+                        startst=state_sup[ss][i2];
+                        i2=8;
+                    }
+                }
+                path[pn][0]=startst;
+                step[pn]=1;
+                pn++;
+            }else if(sotb[i]==2){//2 sup-pt
+                ss=block[i][0],f=block[i][1];
+                int multiple_sup=0,i2,i3;
+                for(int w1=0;w1<8;w1++){
+                    for(int w2=0;w2<8;w2++){
+                        if(state_sup[ss][w1]!=-1&&state_sup[f][w2]!=-1&&state_sup[ss][w1]==state_sup[f][w2]){
+                            multiple_sup=1;
+                            i2=w1;
+                            i3=w2;
+                            w1=8;
+                            w2=8;
+                        }
+                    }
+                }
+                if(multiple_sup==1){
+                    startst=state_sup[ss][i2];
+                    f_state=state_sup[f][i3];
+                }else{
+                    for(i2=0;i2<8;i2++){
+                        if(state_sup[ss][i2]!=-1){
+                            startst=state_sup[ss][i2];
+                            i2=8;
+                        }
+                    }
+                    for(i3=0;i3<8;i3++){
+                        if(state_sup[f][i3]!=-1){
+                            f_state=state_sup[f][i3];
+                            i3=8;
+                        }
+                    }
+                }
+
+                p=f_state;
+                int a2[40];
+                path[pn][0]=startst;
+                pi=0;//used in path[pn][], count the steps
+                while(p!=-1&&p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                    a2[pi]=p;
+                    pi++;
+                    p=prev(startst,p);
+                }
+                a2[pi]=p;
+                int hh=0;
+                for(int win=0;win<pi;win++){
+                    if(a2[win+1]==state_sup[f][0]||a2[win+1]==state_sup[f][1]||a2[win+1]==state_sup[f][2]||a2[win+1]==state_sup[f][3]||a2[win+1]==state_sup[f][4]||a2[win+1]==state_sup[f][5]||a2[win+1]==state_sup[f][6]||a2[win+1]==state_sup[f][7])
+                        hh++;
+                }
+                for(int i4=0;i4<=pi-hh;i4++)//store the path
+                    path[pn][i4]=a2[i4+hh];
+                step[pn]=pi+1-hh;
+                pn++;
+            }else if(sotb[i]==3){//3 sup-pt
+                int temp1,temp2;
+                mt=block[i][0];
+                ss=block[i][1];
+                f=block[i][2];
+                rm=1000;
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt][k]!=-1){
+                        mst=state_sup[mt][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                rm=10000;
+                //first try
+                d=D[startst][mst]+D[mst][endst];
+                printf("%d\n",d);
+                if(d<rm){
+                    rm=d;
+                    route[0]=ss;
+                    route[1]=mt;
+                    route[2]=f;
+                }
+                //second try
+                d=D[mst][startst]+D[startst][endst];
+                printf("%d\n",d);
+                if(d<rm){
+                    rm=d;
+                    route[0]=mt;
+                    route[1]=ss;
+                    route[2]=f;
+                    temp1=mst;
+                    mst=startst;
+                    startst=temp1;
+                }
+                //third try
+                d=D[startst][endst]+D[endst][mst];
+                printf("%d\n",d);
+                if(d<rm){
+                    rm=d;
+                    route[0]=ss;
+                    route[1]=f;
+                    route[2]=mt;
+                    temp1=mst;
+                    mst=endst;
+                    endst=temp1;
+                }
+                p=endst;
+                ss=route[1];
+                int a2[40];
+                a2[0]=p;
+                pi=0;
+                //traceback and memorize the route
+                while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                    a2[pi]=p;
+                    pi++;
+                    p=prev(mst,p);
+                }a2[pi]=p;
+                int hh=0;
+                for(int win=0;win<pi;win++){
+                    if(a2[win+1]==state_sup[f][0]||a2[win+1]==state_sup[f][1]||a2[win+1]==state_sup[f][2]||a2[win+1]==state_sup[f][3]||a2[win+1]==state_sup[f][4]||a2[win+1]==state_sup[f][5]||a2[win+1]==state_sup[f][6]||a2[win+1]==state_sup[f][7])
+                        hh++;
+                }
+                for(int i4=0;i4<=pi-hh;i4++)//store the path
+                    path[pn][i4]=a2[i4+hh];
+                ss=route[0];
+                f=route[1];
+                p=mst;
+                int p2i=pi;
+                pi=0;
+                while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                    a2[pi]=p;
+                    pi++;
+                    p=prev(startst,p);
+                }
+                a2[pi]=p;
+                hh=0;
+                for(int win=0;win<=pi;win++){
+                    if(a2[win+1]==state_sup[f][0]||a2[win+1]==state_sup[f][1]||a2[win+1]==state_sup[f][2]||a2[win+1]==state_sup[f][3]||a2[win+1]==state_sup[f][4]||a2[win+1]==state_sup[f][5]||a2[win+1]==state_sup[f][6]||a2[win+1]==state_sup[f][7])
+                        hh++;
+                }
+                for(int i4=p2i+1;i4<=pi+p2i-hh;i4++)//store the path
+                    path[pn][i4]=a2[i4-p2i+hh];
+                step[pn]=p2i+pi+1-hh;
+                pn++;
+                for(int t=0;t<3;t++)
+                    route[t]=-1;
+                rm=1000;
+            }
+        }else if(cftb[i]==2){
+            if(sotb[i]==4){
+                int condition;//0=1:3, 1=2:2
+                int mt4,mst4;//middle pt
+                int L4;//the number that was left
+                int s1,f1,s2,f2;//2:2
+                int rm4=10000,d4,left4;
+                int temp1,temp2,temp3;//varible for memorize the state
+                int route4[3]={-1,-1,-1},route42[4]={-1,-1,-1,-1};//route4:a car for 3 sup pts; route42:2car each for 21 sup pts;
+                //-----------------------3:1------------------------------------------
+                //-----------------------left4=block[i][3]----------------------------
+
+                mt4=block[i][0];
+                ss=block[i][1];
+                f=block[i][2];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt4][k]!=-1){
+                        mst4=state_sup[mt4][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                //first try
+                d4=D[startst][mst4]+D[mst4][endst];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=ss;
+                    route4[1]=mt4;
+                    route4[2]=f;
+                    L4=block[i][3];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                    temp1=startst;
+                    temp2=mst4;
+                    temp3=endst;
+                }
+                //second try
+                d4=D[mst4][startst]+D[startst][endst];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=mt4;
+                    route4[1]=ss;
+                    route4[2]=f;
+                    L4=block[i][3];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                    temp2=startst;
+                    temp1=mst4;
+                    temp3=endst;
+                }
+                //third try
+                d4=D[startst][endst]+D[endst][mst4];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=ss;
+                    route4[1]=f;
+                    route4[2]=mt4;
+                    L4=block[i][3];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                    temp1=startst;
+                    temp2=endst;
+                    temp3=mst4;
+                }
+                //-----------------------left4=block[i][2]----------------------------
+                mt4=block[i][0];
+                ss=block[i][1];
+                f=block[i][3];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt4][k]!=-1){
+                        mst4=state_sup[mt4][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }//first try
+                d4=D[startst][mst4]+D[mst4][endst];
+                    if(d4<rm4){
+                        rm4=d4;
+                        route4[0]=ss;
+                        route4[1]=mt4;
+                        route4[2]=f;
+                        L4=block[i][2];
+                        for(int LL=0;LL<8;LL++){
+                            if(state_sup[L4][LL]!=-1){
+                                left4=state_sup[L4][LL];
+                                LL=8;//break this loop
+                            }
+                        }
+                        condition=0;
+
+                    }
+                    //second try
+                    d4=D[mst4][startst]+D[startst][endst];
+                    if(d4<rm4){
+                        rm4=d4;
+                        route4[0]=mt4;
+                        route4[1]=ss;
+                        route4[2]=f;
+                        L4=block[i][2];
+                        temp1=mst4;
+                        mst4=startst;
+                        startst=temp1;
+                        for(int LL=0;LL<8;LL++){
+                            if(state_sup[L4][LL]!=-1){
+                                left4=state_sup[L4][LL];
+                                LL=8;//break this loop
+                            }
+                        }
+                        condition=0;
+                    }
+                    //third try
+                    d4=D[startst][endst]+D[endst][mst4];
+                    if(d4<rm4){
+                        rm4=d4;
+                        route4[0]=ss;
+                        route4[1]=f;
+                        route4[2]=mt4;
+                        temp1=mst4;
+                        mst4=endst;
+                        endst=temp1;
+                        L4=block[i][2];
+                        for(int LL=0;LL<8;LL++){
+                            if(state_sup[L4][LL]!=-1){
+                                left4=state_sup[L4][LL];
+                                LL=8;//break this loop
+                            }
+                        }
+                        condition=0;
+                    }
+                //-----------------------left4=block[i][1]----------------------------
+                mt4=block[i][0];
+                ss=block[i][3];
+                f=block[i][2];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt4][k]!=-1){
+                        mst4=state_sup[mt4][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                //first try
+                d4=D[startst][mst4]+D[mst4][endst];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=ss;
+                    route4[1]=mt4;
+                    route4[2]=f;
+                    L4=block[i][1];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                }
+                //second try
+                d4=D[mst4][startst]+D[startst][endst];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=mt4;
+                    route4[1]=ss;
+                    route4[2]=f;
+                    temp1=mst4;
+                    mst4=startst;
+                    startst=temp1;
+                    L4=block[i][1];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                }
+                //third try
+                d4=D[startst][endst]+D[endst][mst4];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=ss;
+                    route4[1]=f;
+                    route4[2]=mt4;
+                    L4=block[i][1];
+                    temp1=mst4;
+                    mst4=endst;
+                    endst=temp1;
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                }
+                //-----------------------left4=block[i][0]----------------------------
+                mt4=block[i][1];
+                ss=block[i][3];
+                f=block[i][2];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt4][k]!=-1){
+                        mst4=state_sup[mt4][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                };
+                 //first try
+                d4=D[startst][mst4]+D[mst4][endst];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=ss;
+                    route4[1]=mt4;
+                    route4[2]=f;
+                    L4=block[i][0];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                }
+                //second try
+                d4=D[mst4][startst]+D[startst][endst];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=mt4;
+                    route4[1]=ss;
+                    route4[2]=f;
+                    L4=block[i][0];
+                    temp1=mst4;
+                    mst4=startst;
+                    startst=temp1;
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                }
+                //third try
+                d4=D[startst][endst]+D[endst][mst4];
+                if(d4<rm4){
+                    rm4=d4;
+                    route4[0]=ss;
+                    route4[1]=f;
+                    route4[2]=mt4;
+                    temp1=mst4;
+                    mst4=endst;
+                    endst=temp1;
+                    L4=block[i][0];
+                    for(int LL=0;LL<8;LL++){
+                        if(state_sup[L4][LL]!=-1){
+                            left4=state_sup[L4][LL];
+                            LL=8;//break this loop
+                        }
+                    }
+                    condition=0;
+                }
+                //--------------------------------2:2---------------------------------
+                int s1s,f1s,s2s,f2s;//state of these block pointsint s1s,f1s,s2s,f2s;//state of these block points
+                //(0,1),(2,3)
+                s1=block[i][0];
+                f1=block[i][1];
+                s2=block[i][2];
+                f2=block[i][3];
+                for(int LL=0;LL<8;LL++){
+                    if(state_sup[s1][LL]!=-1){
+                        s1s=state_sup[s1][LL];
+                        LL=8;//break this loop
+                    }
+                }
+                for(int LL=0;LL<8;LL++){
+                    if(state_sup[f1][LL]!=-1){
+                        f1s=state_sup[f1][LL];
+                        LL=8;//break this loop
+                    }
+                }
+                for(int LL=0;LL<8;LL++){
+                    if(state_sup[s2][LL]!=-1){
+                        s2s=state_sup[s2][LL];
+                        LL=8;//break this loop
+                    }
+                }
+                for(int LL=0;LL<8;LL++){
+                    if(state_sup[f2][LL]!=-1){
+                        f2s=state_sup[f2][LL];
+                        LL=8;//break this loop
+                    }
+                }
+                d4=D[s1s][f1s]+D[s2s][f2s];
+                int temp4;
+                if(d4<rm4){
+                    rm4=d4;
+                    route42[0]=s1;
+                    route42[1]=f1;
+                    route42[2]=s2;
+                    route42[3]=f2;
+                    temp1=s1s;
+                    temp2=f1s;
+                    temp3=s2s;
+                    temp4=f2s;
+                    condition=1;
+                }
+                //(0,2),(1,3)
+                d4=D[s1s][s2s]+D[f1s][f2s];
+                if(d4<rm4){
+                    rm4=d4;
+                    route42[0]=s1;
+                    route42[1]=s2;
+                    route42[2]=f1;
+                    route42[3]=f2;
+                    condition=1;
+                    temp1=s1s;
+                    temp2=s2s;
+                    temp3=f1s;
+                    temp4=f2s;
+                }
+                //(0,3),(2,1)
+                 d4=D[s1s][f2s]+D[s2s][f1s];
+                if(d4<rm4){
+                    rm4=d4;
+                    route42[0]=s1;
+                    route42[1]=f2;
+                    route42[2]=s2;
+                    route42[3]=f1;
+                    condition=1;
+                    temp1=s1s;
+                    temp2=f2s;
+                    temp3=s2s;
+                    temp4=f1s;
+                }
+                if(condition==0){//1:3
+                    p=temp3;
+                    ss=route4[1];
+                    f=route4[2];
+                    int a3[40];
+                    pi=0;
+                    //traceback and memorize the route
+                    while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                        a3[pi]=p;
+                        pi++;
+                        p=prev(temp2,p);
+                    }
+                    a3[pi]=p;
+                    int hh=0;
+                    for(int win=0;win<pi;win++){
+                        if(a3[win+1]==state_sup[f][0]||a3[win+1]==state_sup[f][1]||a3[win+1]==state_sup[f][2]||a3[win+1]==state_sup[f][3]||a3[win+1]==state_sup[f][4]||a3[win+1]==state_sup[f][5]||a3[win+1]==state_sup[f][6]||a3[win+1]==state_sup[f][7])
+                            hh++;
+                    }
+                    if(hh!=0)
+                        hh++;
+                    for(int i4=0;i4<=pi-hh;i4++)//store the path
+                        path[pn][i4]=a3[i4+hh];
+                    int p2i=pi;
+                    pi=0;
+                    p=temp2;
+                    ss=route4[0];
+                    f=route4[1];
+                    while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                        a3[pi]=p;
+                        pi++;
+                        p=prev(temp1,p);
+                    }
+                    a3[pi]=p;
+                     hh=0;
+                    for(int win=0;win<=pi;win++){
+                        if(a3[win+1]==state_sup[f][0]||a3[win+1]==state_sup[f][1]||a3[win+1]==state_sup[f][2]||a3[win+1]==state_sup[f][3]||a3[win+1]==state_sup[f][4]||a3[win+1]==state_sup[f][5]||a3[win+1]==state_sup[f][6]||a3[win+1]==state_sup[f][7])
+                            hh++;
+                    }
+                    for(int i4=p2i+1;i4<=pi+p2i-hh;i4++)//store the path
+                        path[pn][i4]=a3[i4-p2i+hh];
+                    step[pn]=pi+p2i-hh+1;
+                    pn++;
+                    path[pn][0]=left4;
+                    step[pn]=1;
+                    pn++;
+                }else if(condition==1){//2:2
+                    p=temp2;
+                    f=route42[1];
+                    ss=route42[0];
+                    int a32[40];
+                    pi=0;
+                    //traceback and memorize the middle-pt to start-pt route
+                    while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                        a32[pi]=p;
+                        pi++;
+                        p=prev(temp1,p);
+                    }
+                    a32[pi]=p;
+                    int hh=0;
+                    for(int win=0;win<pi;win++){
+                        if(a32[win+1]==state_sup[f][0]||a32[win+1]==state_sup[f][1]||a32[win+1]==state_sup[f][2]||a32[win+1]==state_sup[f][3]||a32[win+1]==state_sup[f][4]||a32[win+1]==state_sup[f][5]||a32[win+1]==state_sup[f][6]||a32[win+1]==state_sup[f][7])
+                            hh++;
+                    }
+                    for(int i4=0;i4<=pi-hh;i4++)//store the path
+                        path[pn][i4]=a32[i4+hh];
+                    step[pn]=pi+1-hh;
+                    pn++;
+                    pi=0;
+                    hh=0;
+                    p=temp4;
+                    ss=route42[2];
+                    f=route42[3];
+                      //traceback and memorize the end-pt to middle-pt route
+                    while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                        a32[pi]=p;
+                        pi++;
+                        p=prev(temp3,p);
+                    }
+                    a32[pi]=p;
+                    for(int win=0;win<pi;win++){
+                        if(a32[win+1]==state_sup[f][0]||a32[win+1]==state_sup[f][1]||a32[win+1]==state_sup[f][2]||a32[win+1]==state_sup[f][3]||a32[win+1]==state_sup[f][4]||a32[win+1]==state_sup[f][5]||a32[win+1]==state_sup[f][6]||a32[win+1]==state_sup[f][7])
+                            hh++;
+                    }
+                    for(int i4=0;i4<=pi-hh;i4++)//store the path
+                        path[pn][i4]=a32[i4+hh];
+                    step[pn]=pi+1-hh;
+                    pn++;
+                }
+                for(int t=0;t<3;t++)//reset the array for another compute
+                    route4[t]=-1;
+                for(int t=0;t<4;t++)
+                    route42[t]=-1;
+                rm4=10000;
+
+            }else if(sotb[i]==5){
+                rm=10000;
+                int temp1,temp2,temp3,temp4,temp5,tem5,tem4,t4,t5;//varible for the states
+                for(int ft=0;ft<3;ft++){//012,123,234
+                    ss=block[i][ft];
+                    mt=block[i][ft+1];
+                    f=block[i][ft+2];
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[mt][k]!=-1){
+                            mst=state_sup[mt][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[ss][k]!=-1){
+                            startst=state_sup[ss][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[f][k]!=-1){
+                            endst=state_sup[f][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    switch (i){
+                        case 0:
+                            t4=block[i][3];
+                            t5=block[i][4];
+                            break;
+                        case 1:
+                            t4=block[i][0];
+                            t5=block[i][4];
+                            break;
+                        case 2:
+                            t4=block[i][0];
+                            t5=block[i][1];
+                            break;
+
+                        }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t4][k]!=-1){
+                            tem4=state_sup[t4][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t5][k]!=-1){
+                            tem5=state_sup[t5][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    d=D[startst][mst]+D[mst][endst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=ss;
+                        route[1]=mt;
+                        route[2]=f;
+                        temp1=startst;
+                        temp2=mst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+
+                    }
+                    d=D[mst][startst]+D[startst][endst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=mt;
+                        route[1]=ss;
+                        route[2]=f;
+                        temp1=mst;
+                        temp2=startst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                    d=D[startst][endst]+D[endst][mst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=ss;
+                        route[1]=f;
+                        route[2]=mt;
+                        temp1=startst;
+                        temp2=endst;
+                        temp3=mst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                }
+                for(int ft=0;ft<2;ft++){//023,134
+                    ss=block[i][ft];
+                    mt=block[i][ft+2];
+                    f=block[i][ft+3];
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[mt][k]!=-1){
+                            mst=state_sup[mt][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[ss][k]!=-1){
+                            startst=state_sup[ss][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[f][k]!=-1){
+                            endst=state_sup[f][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    switch (i){
+                        case 0:
+                            t4=block[i][1];
+                            t5=block[i][4];
+                            break;
+                        case 1:
+                            t4=block[i][0];
+                            t5=block[i][2];
+                            break;
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t4][k]!=-1){
+                            tem4=state_sup[t4][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t5][k]!=-1){
+                            tem5=state_sup[t5][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    d=D[startst][mst]+D[mst][endst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=ss;
+                        route[1]=mt;
+                        route[2]=f;
+                        temp1=startst;
+                        temp2=mst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                    d=D[mst][startst]+D[startst][endst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=mt;
+                        route[1]=ss;
+                        route[2]=f;
+                        temp1=mst;
+                        temp2=startst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                    d=D[startst][endst]+D[endst][mst];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=ss;
+                        route[1]=f;
+                        route[2]=mt;
+                        temp1=startst;
+                        temp2=endst;
+                        temp3=mst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                }
+                for(int ft=0;ft<2;ft++){//013,124
+                    ss=block[i][ft+3];
+                    mt=block[i][ft];
+                    f=block[i][ft+1];
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[mt][k]!=-1){
+                            mst=state_sup[mt][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[ss][k]!=-1){
+                            startst=state_sup[ss][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[f][k]!=-1){
+                            endst=state_sup[f][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    switch (i){
+                        case 0:
+                            t4=block[i][2];
+                            t5=block[i][4];
+                            break;
+                        case 1:
+                            t4=block[i][0];
+                            t5=block[i][3];
+                            break;
+                        }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t4][k]!=-1){
+                            tem4=state_sup[t4][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t5][k]!=-1){
+                            tem5=state_sup[t5][k];//assign this state to be start point state
+                            k=8;
+                        }
+                    }
+                    d=D[startst][mst]+D[mst][endst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=ss;
+                        route[1]=mt;
+                        route[2]=f;
+                        temp1=startst;
+                        temp2=mst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                    d=D[mst][startst]+D[startst][endst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=mt;
+                        route[1]=ss;
+                        route[2]=f;
+                        temp1=mst;
+                        temp2=startst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                     d=D[startst][endst]+D[endst][mst]+D[tem4][tem5];
+                    if(d<rm){
+                        rm=d;
+                        route[0]=ss;
+                        route[1]=f;
+                        route[2]=mt;
+                        temp1=startst;
+                        temp2=endst;
+                        temp3=mst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                    }
+                }
+                //024
+                ss=block[i][0];
+                mt=block[i][2];
+                f=block[i][4];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt][k]!=-1){
+                        mst=state_sup[mt][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                t4=block[i][1];
+                t5=block[i][3];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t4][k]!=-1){
+                            tem4=state_sup[t4][k];//assign this state to be start point state
+                            k=8;
+                        }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t5][k]!=-1){
+                            tem5=state_sup[t5][k];//assign this state to be start point state
+                            k=8;
+                        }
+                }
+                d=D[startst][mst]+D[mst][endst]+D[tem4][tem5];
+                if(d<rm){
+                    rm=d;
+                        route[0]=ss;
+                        route[1]=mt;
+                        route[2]=f;
+                        temp1=startst;
+                        temp2=mst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                }
+                d=D[mst][startst]+D[startst][endst];
+                if(d<rm){
+                    rm=d;
+                    route[0]=mt;
+                    route[1]=ss;
+                    route[2]=f;
+                    temp1=mst;
+                    temp2=startst;
+                    temp3=endst;
+                    temp4=tem4;
+                    temp5=tem5;
+                    route2[0]=t4;
+                    route2[1]=t5;
+                }
+                d=D[startst][endst]+D[endst][mst];
+                if(d<rm){
+                    rm=d;
+                    route[0]=ss;
+                    route[1]=f;
+                    route[2]=mt;
+                    temp1=startst;
+                    temp2=endst;
+                    temp3=mst;
+                    temp4=tem4;
+                    temp5=tem5;
+                    route2[0]=t4;
+                    route2[1]=t5;
+                }
+                //034
+                ss=block[i][0];
+                mt=block[i][3];
+                f=block[i][4];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt][k]!=-1){
+                        mst=state_sup[mt][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                t4=block[i][1];
+                t5=block[i][2];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t4][k]!=-1){
+                            tem4=state_sup[t4][k];//assign this state to be start point state
+                            k=8;
+                        }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t5][k]!=-1){
+                            tem5=state_sup[t5][k];//assign this state to be start point state
+                            k=8;
+                        }
+                }
+                d=D[startst][mst]+D[mst][endst]+D[tem4][tem5];
+                if(d<rm){
+                    rm=d;
+                        route[0]=ss;
+                        route[1]=mt;
+                        route[2]=f;
+                        temp1=startst;
+                        temp2=mst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+
+                }
+                d=D[mst][startst]+D[startst][endst];
+                if(d<rm){
+                    rm=d;
+                    route[0]=mt;
+                    route[1]=ss;
+                    route[2]=f;
+                    temp1=mst;
+                    temp2=startst;
+                    temp3=endst;
+                    temp4=tem4;
+                    temp5=tem5;
+                    route2[0]=t4;
+                    route2[1]=t5;
+                }
+                d=D[startst][endst]+D[endst][mst];
+                if(d<rm){
+                    rm=d;
+                    route[0]=ss;
+                    route[1]=f;
+                    route[2]=mt;
+                    temp1=startst;
+                    temp2=endst;
+                    temp3=mst;
+                    temp4=tem4;
+                    temp5=tem5;
+                    route2[0]=t4;
+                    route2[1]=t5;
+                }
+                //014
+                ss=block[i][0];
+                mt=block[i][1];
+                f=block[i][4];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[mt][k]!=-1){
+                        mst=state_sup[mt][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[ss][k]!=-1){
+                        startst=state_sup[ss][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                    if(state_sup[f][k]!=-1){
+                        endst=state_sup[f][k];//assign this state to be start point state
+                        k=8;
+                    }
+                }
+                t4=block[i][2];
+                t5=block[i][3];
+                for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t4][k]!=-1){
+                            tem4=state_sup[t4][k];//assign this state to be start point state
+                            k=8;
+                        }
+                }
+                for(int k=0;k<8;k++){//find a supply state that exists
+                        if(state_sup[t5][k]!=-1){
+                            tem5=state_sup[t5][k];//assign this state to be start point state
+                            k=8;
+                        }
+                }
+                d=D[startst][mst]+D[mst][endst]+D[tem4][tem5];
+                if(d<rm){
+                    rm=d;
+                        route[0]=ss;
+                        route[1]=mt;
+                        route[2]=f;
+                        temp1=startst;
+                        temp2=mst;
+                        temp3=endst;
+                        temp4=tem4;
+                        temp5=tem5;
+                        route2[0]=t4;
+                        route2[1]=t5;
+                }
+                d=D[mst][startst]+D[startst][endst]+D[tem4][tem5];
+                if(d<rm){
+                    rm=d;
+                    route[0]=mt;
+                    route[1]=ss;
+                    route[2]=f;
+                    temp1=mst;
+                    temp2=startst;
+                    temp3=endst;
+                    temp4=tem4;
+                    temp5=tem5;
+                    route2[0]=t4;
+                    route2[1]=t5;
+                }
+                d=D[startst][endst]+D[endst][mst]+D[tem4][tem5];
+                if(d<rm){
+                    rm=d;
+                    route[0]=ss;
+                    route[1]=f;
+                    route[2]=mt;
+                    temp1=startst;
+                    temp2=endst;
+                    temp3=mst;
+                    temp4=tem4;
+                    temp5=tem5;
+                    route2[0]=t4;
+                    route2[1]=t5;
+                }
+                //car No.1 for 3 supply points
+                p=temp3;
+                ss=route[1];
+                int a4[40];
+                pi=0;
+                //traceback and memorize the end-pt to middle-pt route
+                while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                    a4[pi]=p;
+                    pi++;
+                    p=prev(temp2,p);
+                }
+                p=temp2;
+                ss=route[0];
+                //traceback and memorize the middle-pt to start-pt route
+                while(p!=state_sup[ss][0]&&p!=state_sup[ss][1]&&p!=state_sup[ss][2]&&p!=state_sup[ss][3]&&p!=state_sup[ss][4]&&p!=state_sup[ss][5]&&p!=state_sup[ss][6]&&p!=state_sup[ss][7]){
+                    a4[pi]=p;
+                    pi++;
+                    p=prev(temp1,p);
+                }
+                a4[pi]=p;
+                for(int i5=0;i5<=pi;i5++)
+                    path[pn][i5]=a4[pi-i5];
+                step[pn]=pi+1;
+                pn++;
+                //car No.2 for 2 supply points
+                int a42[40];
+                pi=0;
+                ss=route2[0];
+                f=block[i][ss];
+                p=temp5;
+                //traceback and memorize the end-pt to start-pt route
+                while(p!=state_sup[f][0]&&p!=state_sup[f][1]&&p!=state_sup[f][2]&&p!=state_sup[f][3]&&p!=state_sup[f][4]&&p!=state_sup[f][5]&&p!=state_sup[f][6]&&p!=state_sup[f][7]){
+                    a42[pi]=p;
+                    pi++;
+                    p=prev(temp4,p);
+                }
+                a42[pi]=p;
+                for(int i5=0;i5<=pi;i5++)
+                    path[pn][i5]=a42[pi-i5];
+                step[pn]=pi+1;
+                pn++;
+            }
+        }
+    }
+    //--------------------------------------------------output the result------------------------------------------------------
+    Sleep(100);
+    animation(path,cars,step);
+    for(int i=0;i<20;i++){
+                for(int j=0;j<20;j++){
+                    if(maze[i][j]==0){
+                        //color(0x08);
+                        printf("\033[45m  \033[m");//purple, wall
+                    }
+                    else if(maze[i][j]==1){
+                        //color(0x0b);
+                        printf("\033[43m  \033[m");//yellow, way
+                    }
+                    else if(maze[i][j]==2){
+                        //color(0x0c);
+                       printf("\033[46m  \033[m");//blue, supply
+                    }
+                    else if(maze[i][j]==3){//now
+                        //color(0x0e);
+                        printf("\033[41m  \033[m");//blue, supply
+                    }
+                    else if(maze[i][j]==4){//visited
+                        //color(0x6);
+                        printf("\033[42m  \033[m");//blue, supply
+                    }
+                    //printf("¡½");
+                }
+                printf("\n");
+                //color(0xf);
+            }
+        int ts=0;
+        for(int i=0;i<pn;i++)
+            ts+=step[i];
+        printf("Total cars=%d\nTotal steps=%d",cars,ts);
+    return 0;
+}
+void color(int color_value){
+    HANDLE H=GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(H,color_value);
+}
+void push(int st){
+    if(top+1<max){
+        top++;
+        stack[top]=st;
+    }
+}
+void pop(){
+    top--;
+}
+void reset(){
+    top=-1;
+}
+void BFS(int st){
+    for(int i=0;i<800;i++)
+        vis[i]=0;
+    d1[0]=st;
+    vis[st]=1;
+    d1_sz=1;
+    d2_sz=0;
+    int now=1;
+    int v;//to store adj[res][j]
+    int next;//storre d2[]
+    while(d1_sz!=0){
+        //put d1's neighbor into d2
+        for(int i=0;i<d1_sz;i++){
+            int res=d1[i];
+            for(int j=0;j<6;j++){
+                v=adj[res][j];
+                if(!vis[v]&&v!=-1){
+                    vis[v]=1;
+                    d2[d2_sz]=v;
+                    d2_sz+=1;
+                }
+            }
+        }
+        //the distance of d1's nodes is now
+        for(int i=0;i<d2_sz;i++){
+            next=d2[i];
+            D[st][next]=now;
+        }
+        //replace d1 with d2, then clear d2
+        for(int i=0; i<d2_sz; i++){
+            d1[i]=d2[i];
+            d2[i]=0;
+        }
+        d1_sz=d2_sz;
+        d2_sz=0;
+        now+=1;
+    }
+}
+int prev(int st, int f){
+    for(int i=0;i<6;++i){
+        int res=adj[f][i];
+        if(D[st][res]==D[st][f]-1&&res!=-1)
+            return res;
+    }
+}
+void animation(int path[][40],int cn, int s[10]){
+    int car,temp=0;
+    int x,y;
+    for(int a=0;a<cn;a++){//each car
+        for(int b=0;b<s[a];b++){
+            car=path[a][b];
+            if(car<400){
+                x=car/20;
+                y=car%20;
+                if(maze[x][y]!=2)maze[x][y]=3;
+                if(maze[x][y+1]!=2)maze[x][y+1]=3;
+                if(maze[x][y+2]!=2)maze[x][y+2]=3;
+                if(maze[x+1][y]!=2)maze[x+1][y]=3;
+                if(maze[x+1][y+1]!=2)maze[x+1][y+1]=3;
+                if(maze[x+1][y+2]!=2)maze[x+1][y+2]=3;
+            }else{
+                x=(car-401)/20;
+                y=(car-401)%20;
+                if(maze[x][y]!=2)maze[x][y]=3;
+                if(maze[x][y+1]!=2)maze[x][y+1]=3;
+                if(maze[x+1][y]!=2)maze[x+1][y]=3;
+                if(maze[x+1][y+1]!=2)maze[x+1][y+1]=3;
+                if(maze[x+2][y]!=2)maze[x+2][y]=3;
+                if(maze[x+2][y+1]!=2)maze[x+2][y+1]=3;
+            }
+
+            for(int i=0;i<20;i++){
+                for(int j=0;j<20;j++){
+                    if(maze[i][j]==0){
+                        //color(0x08);
+                        printf("\033[45m  \033[m");//purple, wall
+                    }
+                    else if(maze[i][j]==1){
+                        //color(0x0b);
+                        printf("\033[43m  \033[m");//yellow, way
+                    }
+                    else if(maze[i][j]==2){
+                        //color(0x0c);
+                        printf("\033[46m  \033[m");//blue, supply
+                    }
+                    else if(maze[i][j]==3){//now
+                        //color(0x0e);
+                        printf("\033[41m  \033[m");//blue, supply
+                    }
+                    else if(maze[i][j]==4){//visited
+                        //color(0x06);
+                        printf("\033[42m  \033[m");//blue, supply
+                    }
+                    //printf("¡½");
+                }
+                printf("\n");
+            }
+            Sleep(30);
+            system("cls");
+            //color(0x0f);
+            if(car<400){
+                x=car/20;
+                y=car%20;
+                if(maze[x][y]!=2)maze[x][y]=4;
+                if(maze[x][y+1]!=2)maze[x][y+1]=4;
+                if(maze[x][y+2]!=2)maze[x][y+2]=4;
+                if(maze[x+1][y]!=2)maze[x+1][y]=4;
+                if(maze[x+1][y+1]!=2)maze[x+1][y+1]=4;
+                if(maze[x+1][y+2]!=2)maze[x+1][y+2]=4;
+            }else{
+                x=(car-401)/20;
+                y=(car-401)%20;
+                if(maze[x][y]!=2)maze[x][y]=4;
+                if(maze[x][y+1]!=2)maze[x][y+1]=4;
+                if(maze[x+1][y]!=2)maze[x+1][y]=4;
+                if(maze[x+1][y+1]!=2)maze[x+1][y+1]=4;
+                if(maze[x+2][y]!=2)maze[x+2][y]=4;
+                if(maze[x+2][y+1]!=2)maze[x+2][y+1]=4;
+            }
+        }
+
+    }
+}
